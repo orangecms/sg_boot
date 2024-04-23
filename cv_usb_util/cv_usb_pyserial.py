@@ -6,7 +6,7 @@ import serial.tools.list_ports
 import sys
 import time
 
-
+# aka KERMIT, 0x1021
 class cv_usb_pyserial:
     # Table of CRC constants - implements x^16+x^12+x^5+1
     crc16_tab = [
@@ -360,7 +360,6 @@ class cv_usb_pyserial:
             return pkt.FAIL
 
         cmd_crc = self.crc16_ccitt(command)
-        # print ("cmd_crc %x" % cmd_crc)
 
         if recv_ack == 1:
             try:
@@ -371,7 +370,6 @@ class cv_usb_pyserial:
                 ret_crc = self.convert(ret[2]) * 256 + self.convert(ret[3])
             except IndexError:
                 ret_crc = 0
-            # print ("ret_crc %x" % ret_crc)
 
             if ret_crc == cmd_crc:
                 self.pkt_cnt += 1
@@ -381,7 +379,7 @@ class cv_usb_pyserial:
                     % ((self.pkt_cnt * (512 - pkt.HEADER_SIZE) * 100) / self.filesize)
                 )
                 sys.stdout.flush()
-                # print ("cmd_crc %x == ret_crc %x" % (cmd_crc, ret_crc))
+                print ("cmd_crc %x == ret_crc %x" % (cmd_crc, ret_crc))
                 pkt.FIP_TX_OFFSET = self.convert(ret[8]) * (2 ** 24) + self.convert(ret[9]) * (2 ** 16) + self.convert(ret[10]) * (2 ** 8) + self.convert(ret[11])
                 pkt.FIP_TX_SIZE = self.convert(ret[12]) * (2 ** 24) + self.convert(ret[13]) * (2 ** 16) + self.convert(ret[14]) * (2 ** 8) + self.convert(ret[15])
                 # print("fip_tx_offset %d" % pkt.FIP_TX_OFFSET)
@@ -455,53 +453,51 @@ class cv_usb_pyserial:
         complete_cnt = 0
         self.pkt_cnt = 0
         self.filesize = 0
-        while complete_cnt < 1:  # For stress test
-            complete_cnt = complete_cnt + 1
-            # tx_len = 512
-            tx_len = 256	# for usb fifo
-            content_file = chunk
-            content_size = size
-            self.filesize = content_size
+        # tx_len = 512
+        tx_len = 256	# for usb fifo
+        content_file = chunk
+        content_size = size
+        self.filesize = content_size
+        last_pos = content_file.tell()
+        print("Send chunk to address 0x%x" % dest_addr)
+
+        while content_size > 0:
+            del self.header[:]
+            del self.data[:]
+            del self.bulk_command[:]
+            content_file.seek(last_pos)
+            if content_size < tx_len - pkt.HEADER_SIZE:
+                self.data.fromfile(content_file, content_size)
+                tx_len = content_size + pkt.HEADER_SIZE
+            else:
+                self.data.fromfile(content_file, tx_len - pkt.HEADER_SIZE)
             last_pos = content_file.tell()
-            # print("Send to address 0x%x" % dest_addr)
 
-            while content_size > 0:
-                del self.header[:]
-                del self.data[:]
-                del self.bulk_command[:]
-                content_file.seek(last_pos)
-                if content_size < tx_len - pkt.HEADER_SIZE:
-                    self.data.fromfile(content_file, content_size)
-                    tx_len = content_size + pkt.HEADER_SIZE
-                else:
-                    self.data.fromfile(content_file, tx_len - pkt.HEADER_SIZE)
-                last_pos = content_file.tell()
+            if Type == "magic":
+                self.header.append(pkt.CV_USB_KEEP_DL)
+            else:
+                self.header.append(pkt.CVI_USB_TX_DATA_TO_RAM)
 
-                if Type == "magic":
-                    self.header.append(pkt.CV_USB_KEEP_DL)
-                else:
-                    self.header.append(pkt.CVI_USB_TX_DATA_TO_RAM)
+            self.header.append((tx_len >> 8) & 0xFF)
+            self.header.append((tx_len & 0xFF))
 
-                self.header.append((tx_len >> 8) & 0xFF)
-                self.header.append((tx_len & 0xFF))
+            self.header.append((dest_addr >> 32) & 0xFF)
+            self.header.append((dest_addr >> 24) & 0xFF)
+            self.header.append((dest_addr >> 16) & 0xFF)
+            self.header.append((dest_addr >> 8) & 0xFF)
+            self.header.append(dest_addr & 0xFF)
 
-                self.header.append((dest_addr >> 32) & 0xFF)
-                self.header.append((dest_addr >> 24) & 0xFF)
-                self.header.append((dest_addr >> 16) & 0xFF)
-                self.header.append((dest_addr >> 8) & 0xFF)
-                self.header.append(dest_addr & 0xFF)
+            self.bulk_command = self.header + self.data
+            send_ok = self.serial_write(self.bulk_command, 1, delay_ms)
 
-                self.bulk_command = self.header + self.data
-                send_ok = self.serial_write(self.bulk_command, 1, delay_ms)
+            if send_ok == 0:
+                dest_addr += tx_len - pkt.HEADER_SIZE
+                content_size -= tx_len - pkt.HEADER_SIZE
+            else:
+                last_pos -= tx_len - pkt.HEADER_SIZE
 
-                if send_ok == 0:
-                    dest_addr += tx_len - pkt.HEADER_SIZE
-                    content_size -= tx_len - pkt.HEADER_SIZE
-                else:
-                    last_pos -= tx_len - pkt.HEADER_SIZE
-
-            # print ("complete_cnt %d" % complete_cnt)
-            print("--- %s Seconds ---" % round(time.time() - start_time, 2))
+            print ("content_size %d" % content_size)
+        print("--- %s Seconds ---" % round(time.time() - start_time, 2))
         return
 
     def usb_send_req_kernel(self, token, reqLen, file_name, ack):
@@ -558,17 +554,14 @@ class cv_usb_pyserial:
             self.ioTime = self.ioTime + (time.time() - start_time)
 
             cmd_crc = self.crc16_ccitt(message)
-            # print ("cmd_crc %x" % cmd_crc)
 
-            ret_crc = self.convert(ret[pkt.RSP_CRC16_HI_OFFSET]) * 256 + self.convert(
-                ret[pkt.RSP_CRC16_LO_OFFSET]
-            )
-            # print ("ret_crc %x" % ret_crc)
+            hi = self.convert(ret[pkt.RSP_CRC16_HI_OFFSET])
+            lo = self.convert(ret[pkt.RSP_CRC16_LO_OFFSET])
+            ret_crc = (hi << 8) + lo 
 
             if ret_crc == cmd_crc:
-                if message[pkt.MSG_TOKEN_OFFSET] != self.convert(
-                    ret[pkt.RSP_TOKEN_OFFSET]
-                ):
+                token = self.convert(ret[pkt.RSP_TOKEN_OFFSET])
+                if message[pkt.MSG_TOKEN_OFFSET] != token:
                     sys.stdout.write(
                         "Token: exp 0x%x get 0x%x\n"
                         % (
@@ -692,9 +685,6 @@ class cv_usb_pyserial:
         self.ser_cmd.append((address & 0xFF))
         if data is not None:
             self.ser_cmd = self.ser_cmd + data
-        # else:
-        #     print("data is empty!\n")
-        #     return
         return self.serial_write(self.ser_cmd, 0, 0)
 
     def wait_for_reconnect(self, cnt_seconed):
