@@ -28,6 +28,3 @@ pub const MSG_TOKEN_OFFSET: usize = 0;
 pub const RSP_CRC16_HI_OFFSET: usize = 2;
 pub const RSP_CRC16_LO_OFFSET: usize = 3;
 pub const RSP_TOKEN_OFFSET: usize = 6;
-
-pub const FIP_TX_OFFSET: usize = 0;
-pub const FIP_TX_SIZE: usize = 0;
