@@ -1,8 +1,5 @@
 pub const SUCCESS: usize = 0;
 pub const FAIL: usize = 1;
-pub const TIMEOUT: isize = -1;
-
-pub const HEADER_SIZE: usize = 8;
 
 // Memory addresses
 pub const DUMMY_ADDR: u64 = 0xFF;
@@ -19,9 +16,6 @@ pub const CV_USB_UBREAK: u8 = 4;
 pub const CV_USB_PRG_CMD: u8 = 6;
 pub const CVI_USB_REBOOT: u8 = 22;
 pub const CVI_USB_PROGRAM: u8 = 0x83;
-
-// Cannot be too large on Windows!
-pub const USB_BULK_MAX_SIZE: usize = 0x80000; // 0x4000000;
 
 pub const MSG_TOKEN_OFFSET: usize = 0;
 

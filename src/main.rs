@@ -192,7 +192,7 @@ fn send_file(port: &mut std::boxed::Box<dyn serialport::SerialPort>, f: &[u8]) {
 }
 
 fn send_magic(port: &mut std::boxed::Box<dyn serialport::SerialPort>) {
-    println!("\nsend NO MAGIC...\n");
+    println!("send NO MAGIC...");
     let h = Header {
         cmd: protocol::CV_USB_KEEP_DL,
         size: NO_MAGIC.len() as u16,
