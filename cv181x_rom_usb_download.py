@@ -68,12 +68,11 @@ def main():
     cv_usb_serial.serial_query([pkt.rom_vidpid])
     cv_usb_serial.usb_send_chunk(magic, magic_size, pkt.DUMMY_ADDR, 0, Type="magic")
 
+    cv_usb_serial.serial_query([pkt.rom_vidpid])
+
     print("Send %dB fip.bin..." % fip_tx_size)
     fip_bin = open(fip_path, "rb")
-
-    cv_usb_serial.serial_query([pkt.rom_vidpid])
     cv_usb_serial.usb_send_chunk(fip_bin, fip_tx_size, 0, 0, Type="file")
-
     cv_usb_serial.usb_send_req_data(pkt.CVI_USB_TX_FLAG, 0x0E000004, 12, flag)
     cv_usb_serial.usb_send_req_data(pkt.CV_USB_BREAK, pkt.DUMMY_ADDR, 0, None)
 
