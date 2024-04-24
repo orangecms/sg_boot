@@ -6,7 +6,7 @@ import serial.tools.list_ports
 import sys
 import time
 
-# aka KERMIT, 0x1021
+# aka XMODEM, https://docs.rs/crc/latest/crc/constant.CRC_16_XMODEM.html
 class cv_usb_pyserial:
     # Table of CRC constants - implements x^16+x^12+x^5+1
     crc16_tab = [
@@ -367,21 +367,36 @@ class cv_usb_pyserial:
             except serial.SerialTimeoutException as e:
                 print("Read ACK timeout")
             try:
-                ret_crc = self.convert(ret[2]) * 256 + self.convert(ret[3])
+                hi = self.convert(ret[2])
+                lo = self.convert(ret[3])
+                ret_crc = (hi << 8) | lo
             except IndexError:
                 ret_crc = 0
 
+            # obtain fixture
+            # print(command)
+            # print ("cmd_crc %x, ret_crc %x" % (cmd_crc, ret_crc))
             if ret_crc == cmd_crc:
                 self.pkt_cnt += 1
-                # sys.stdout.write("Packet count: %d   \r" % self.pkt_cnt)
+                size = self.filesize
+                sent = self.pkt_cnt * pkt.PAYLOAD_SIZE
+                perc = sent / size * 100
                 sys.stdout.write(
-                    "[Working] %d%%    \r"
-                    % ((self.pkt_cnt * (512 - pkt.HEADER_SIZE) * 100) / self.filesize)
+                    "\r %d%% (%d/%d) - packet %d " % (perc, sent, size, self.pkt_cnt)
                 )
                 sys.stdout.flush()
-                print ("cmd_crc %x == ret_crc %x" % (cmd_crc, ret_crc))
-                pkt.FIP_TX_OFFSET = self.convert(ret[8]) * (2 ** 24) + self.convert(ret[9]) * (2 ** 16) + self.convert(ret[10]) * (2 ** 8) + self.convert(ret[11])
-                pkt.FIP_TX_SIZE = self.convert(ret[12]) * (2 ** 24) + self.convert(ret[13]) * (2 ** 16) + self.convert(ret[14]) * (2 ** 8) + self.convert(ret[15])
+                pkt.FIP_TX_OFFSET = (
+                    (self.convert(ret[8]) << 24) |
+                    (self.convert(ret[9]) << 16) |
+                    (self.convert(ret[10]) << 8) |
+                    self.convert(ret[11])
+                )
+                pkt.FIP_TX_SIZE = (
+                    (self.convert(ret[12]) << 24) |
+                    (self.convert(ret[13]) << 16) |
+                    (self.convert(ret[14]) << 8) |
+                    self.convert(ret[15])
+                )
                 # print("fip_tx_offset %d" % pkt.FIP_TX_OFFSET)
                 # print("fip_tx_size %d" % pkt.FIP_TX_SIZE)
 
@@ -487,6 +502,8 @@ class cv_usb_pyserial:
             self.header.append((dest_addr >> 8) & 0xFF)
             self.header.append(dest_addr & 0xFF)
 
+            print("header", self.header)
+
             self.bulk_command = self.header + self.data
             send_ok = self.serial_write(self.bulk_command, 1, delay_ms)
 
@@ -496,7 +513,7 @@ class cv_usb_pyserial:
             else:
                 last_pos -= tx_len - pkt.HEADER_SIZE
 
-            print ("content_size %d" % content_size)
+            print ("remaining %d" % content_size)
         print("--- %s Seconds ---" % round(time.time() - start_time, 2))
         return
 
