@@ -1,0 +1,13 @@
+[package]
+name = "sg_boot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4.6", features = ["derive"] }
+clap-num = "1.0.2"
+crc = "*"
+env_logger = "0.9"
+log = "0.4.17"
+serialport = "4.2.0"
+rusb = "0.9"
