@@ -142,7 +142,7 @@ pub fn send_flag_and_break(port: &mut Port) {
     send(port, &data);
 }
 
-const IMG_ALIGN: usize = 512;
+pub const IMG_ALIGN: usize = 512;
 
 fn zeroes<const N: usize>() -> [u8; N] {
     [0u8; N]

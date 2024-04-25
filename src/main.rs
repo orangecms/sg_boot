@@ -43,7 +43,7 @@ enum Command {
     },
 }
 
-/// Sopho/CVITek mask ROM loader tool
+/// Sophgo/CVITek mask ROM loader tool
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -96,68 +96,68 @@ fn connect() -> std::boxed::Box<dyn serialport::SerialPort> {
 }
 
 const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_XMODEM);
+use crate::protocol::IMG_ALIGN;
+
 fn main() {
-    let payload = include_bytes!("../oreboot_x.bin");
-
-    let checksum = CRC.checksum(payload);
-    println!("Payload checksum: {checksum:04x}");
-    let checksum = checksum.to_le_bytes();
-
-    let param1 = Param1 {
-        bl2_img_size: (payload.len() as u32).to_le_bytes(),
-        bl2_img_cksum: [checksum[0], checksum[1], 0xfe, 0xca],
-        ..Default::default()
-    };
-
-    let checksum = param1.checksum();
-    println!("Header checksum: {checksum:04x}");
-    let checksum = checksum.to_le_bytes();
-
-    let header = crate::protocol::CVITekHeader {
-        param1_checksum: [checksum[0], checksum[1], 0xfe, 0xca],
-        param1,
-        ..Default::default()
-    };
-
-    let mut s = header.to_slice().to_vec();
-    s.truncate(0x100);
-    println!("{:02x?}", s);
-    // println!("{header:#02x?}");
-    // println!("{:02x?}", header.to_slice());
-
     let cmd = Cli::parse().cmd;
     env_logger::init();
 
-    println!("Waiting for CVITek USB devices...");
-    let mut port = connect();
-    crate::protocol::send_magic(&mut port);
-    std::thread::sleep(Duration::from_millis(500));
-
-    println!("send HEADER...");
-    let mut port = connect();
-
-    // let header = include_bytes!("../header.bin");
-    crate::protocol::send_file(&mut port, header.to_slice());
-    crate::protocol::send_flag_and_break(&mut port);
-    std::thread::sleep(HALF_SEC);
-
-    println!("Waiting for CVITek USB devices...");
-    let mut port = connect();
-    crate::protocol::send_magic(&mut port);
-
-    println!("send PAYLOAD...");
-    crate::protocol::send_file(&mut port, payload);
-    crate::protocol::send_flag_and_break(&mut port);
-
     match cmd {
         Command::Run { file_name } => {
-            let file = std::fs::read(file_name).unwrap();
             let addr = SRAM_BASE;
-            // protocol::write(&port, timeout, &file, addr);
-            // protocol::exec(&port, timeout, addr).unwrap();
+            let mut payload = std::fs::read(file_name).unwrap();
+
+            let sz = payload.len();
+            let aligned = if sz % IMG_ALIGN == 0 {
+                sz
+            } else {
+                (sz / IMG_ALIGN + 1) * IMG_ALIGN
+            };
+            payload.truncate(aligned);
+            println!("Payload size: {sz}; aligned: {aligned}");
+
+            let checksum = CRC.checksum(&payload);
+            println!("Payload checksum: {checksum:04x}");
+
+            let checksum = checksum.to_le_bytes();
+            let param1 = Param1 {
+                bl2_img_size: (payload.len() as u32).to_le_bytes(),
+                bl2_img_cksum: [checksum[0], checksum[1], 0xfe, 0xca],
+                ..Default::default()
+            };
+
+            let checksum = param1.checksum();
+            println!("Header checksum: {checksum:04x}");
+
+            let checksum = checksum.to_le_bytes();
+            let header = crate::protocol::CVITekHeader {
+                param1_checksum: [checksum[0], checksum[1], 0xfe, 0xca],
+                param1,
+                ..Default::default()
+            };
+
+            println!("Waiting for CVITek USB devices...");
+            let mut port = connect();
+            crate::protocol::send_magic(&mut port);
+            std::thread::sleep(Duration::from_millis(500));
+
+            println!("send HEADER...");
+            let mut port = connect();
+
+            crate::protocol::send_file(&mut port, header.to_slice());
+            crate::protocol::send_flag_and_break(&mut port);
+            std::thread::sleep(HALF_SEC);
+
+            println!("Waiting for CVITek USB devices...");
+            let mut port = connect();
+            crate::protocol::send_magic(&mut port);
+
+            println!("send PAYLOAD...");
+            crate::protocol::send_file(&mut port, &payload);
+            crate::protocol::send_flag_and_break(&mut port);
         }
         Command::Info => {
-            println!();
+            println!("nothing to see here :)");
         }
     }
 }
