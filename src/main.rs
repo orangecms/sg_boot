@@ -1,22 +1,23 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use log::info;
-use std::io::Write;
 use std::time::Duration;
 use std::{thread, time};
 
-const POLL_PERIOD: time::Duration = time::Duration::from_millis(50);
-// two minutes should be plenty
-const TIMEOUT: time::Duration = time::Duration::from_secs(120);
-
 mod protocol;
 
-// https://docs.rs/crc/latest/crc/constant.CRC_16_KERMIT.html
+// two minutes should be plenty
+const POLL_TIMEOUT: Duration = Duration::from_secs(120);
+const POLL_PERIOD: Duration = Duration::from_millis(50);
+const TEN_SECS: Duration = Duration::from_secs(10);
+const HALF_SEC: Duration = Duration::from_millis(500);
 
 const HEADER: &[u8] = include_bytes!("../header.bin");
 const OREBOOT: &[u8] = include_bytes!("../oreboot_x.bin");
 
 const USB_VID_CVITEK: u16 = 0x3346;
 const USB_PID_USB_COM: u16 = 0x1000;
+
+const SRAM_BASE: usize = 0x0000_0000;
 
 #[allow(non_camel_case_types)]
 #[derive(ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
@@ -52,20 +53,24 @@ struct Cli {
     cmd: Command,
 }
 
+fn print_port_info(info: &serialport::UsbPortInfo) {
+    let mf = info.manufacturer.as_ref().map_or("", String::as_str);
+    let pi = info.product.as_ref().map_or("", String::as_str);
+    let sn = info.serial_number.as_ref().map_or("", String::as_str);
+    info!("{mf} {pi} {:04x}:{:04x} ({sn})", info.vid, info.pid);
+}
+
 fn poll_dev() -> String {
     let now = time::Instant::now();
 
-    while time::Instant::now() <= now + TIMEOUT {
+    while time::Instant::now() <= now + POLL_TIMEOUT {
         match serialport::available_ports() {
             Ok(ports) => {
                 for p in ports {
                     let name = p.port_name;
-                    if let serialport::SerialPortType::UsbPort(ref info) = p.port_type {
+                    if let serialport::SerialPortType::UsbPort(info) = p.port_type {
                         if info.vid == USB_VID_CVITEK && info.pid == USB_PID_USB_COM {
-                            let sn = info.serial_number.as_ref().map_or("", String::as_str);
-                            let mf = info.manufacturer.as_ref().map_or("", String::as_str);
-                            let pi = info.product.as_ref().map_or("", String::as_str);
-                            info!("{mf} {pi} {:04x}:{:04x} ({sn})", info.vid, info.pid);
+                            print_port_info(&info);
                             return name;
                         }
                     }
@@ -80,49 +85,42 @@ fn poll_dev() -> String {
     panic!("timeout waiting for CVITek USB device");
 }
 
-const SRAM_BASE: usize = 0x0000_0000;
+fn connect() -> std::boxed::Box<dyn serialport::SerialPort> {
+    let dev = poll_dev();
+    match serialport::new(dev.clone(), 115_200)
+        .timeout(TEN_SECS)
+        .open()
+    {
+        Ok(d) => d,
+        Err(_) => panic!("Failed to open serial port {dev}"),
+    }
+}
 
-const PORT_TIMEOUT: Duration = Duration::from_secs(10);
-
+const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_XMODEM);
 fn main() {
+    let checksum = CRC.checksum(OREBOOT);
+    println!("Payload checksum: {checksum:04x}");
+
+    let cut = HEADER[16..2048].to_vec();
+    let checksum = CRC.checksum(&cut);
+    println!("Header checksum: {checksum:04x}");
+
     let cmd = Cli::parse().cmd;
     env_logger::init();
 
     println!("Waiting for CVITek USB devices...");
-    let dev = poll_dev();
-    let mut port = match serialport::new(dev.clone(), 115_200)
-        .timeout(PORT_TIMEOUT)
-        .open()
-    {
-        Ok(d) => d,
-        Err(_) => panic!("Failed to open serial port {dev}"),
-    };
+    let mut port = connect();
     crate::protocol::send_magic(&mut port);
     std::thread::sleep(Duration::from_millis(500));
 
-    let dev = poll_dev();
-    let mut port = match serialport::new(dev.clone(), 115_200)
-        .timeout(PORT_TIMEOUT)
-        .open()
-    {
-        Ok(d) => d,
-        Err(_) => panic!("Failed to open serial port {dev}"),
-    };
-
     println!("send HEADER...");
+    let mut port = connect();
     crate::protocol::send_file(&mut port, HEADER);
     crate::protocol::send_flag_and_break(&mut port);
-    std::thread::sleep(Duration::from_millis(500));
+    std::thread::sleep(HALF_SEC);
 
     println!("Waiting for CVITek USB devices...");
-    let dev = poll_dev();
-    let mut port = match serialport::new(dev.clone(), 115_200)
-        .timeout(PORT_TIMEOUT)
-        .open()
-    {
-        Ok(d) => d,
-        Err(_) => panic!("Failed to open serial port {dev}"),
-    };
+    let mut port = connect();
     crate::protocol::send_magic(&mut port);
 
     println!("send PAYLOAD...");
