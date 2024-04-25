@@ -141,3 +141,132 @@ pub fn send_flag_and_break(port: &mut Port) {
     let data = BREAK_HEADER.to_slice();
     send(port, &data);
 }
+
+const IMG_ALIGN: usize = 512;
+
+fn zeroes<const N: usize>() -> [u8; N] {
+    [0u8; N]
+}
+
+fn ones<const N: usize>() -> [u8; N] {
+    [0xffu8; N]
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct CVITekHeader {
+    pub magic: [u8; 8],
+    pub _pad: u32,
+    pub param1_checksum: [u8; 4],
+    pub param1: Param1,
+}
+
+impl Default for CVITekHeader {
+    fn default() -> Self {
+        let magic = *b"CVBL01\n\0";
+        CVITekHeader {
+            magic,
+            _pad: 0,
+            param1_checksum: zeroes(),
+            param1: Param1::default(),
+        }
+    }
+}
+
+impl CVITekHeader {
+    pub fn to_slice(&self) -> &[u8] {
+        let size = 4096 - 16;
+        let ptr = self as *const Self as *const u8;
+        unsafe { std::slice::from_raw_parts(ptr, size) }
+    }
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct Param1 {
+    pub nand_info: [u8; 128],
+    pub nor_info: [u8; 36],
+    pub fip_flags: [u8; 8],
+    pub chip_conf_size: [u8; 4],
+    // BLCP
+    pub blcp_img_cksum: [u8; 4],
+    pub blcp_img_size: [u8; 4],
+    pub blcp_img_runaddr: [u8; 4],
+    pub blcp_param_loadaddr: [u8; 4],
+    pub blcp_param_size: [u8; 4],
+    // BL2
+    pub bl2_img_cksum: [u8; 4],
+    pub bl2_img_size: [u8; 4],
+    //
+    pub bld_img_size: [u8; 4],
+    pub param2_loadaddr: [u8; 4],
+    pub reserved1: [u8; 4],
+    pub chip_conf: [u8; 24], // originally 760
+    pub _pad: [u8; 736],
+    pub bl_ek: [u8; 32],
+    pub root_pk: [u8; 512],
+    pub bl_pk: [u8; 512],
+    // last 2k
+    pub bl_pk_sig: [u8; 512],
+    pub chip_conf_sig: [u8; 512],
+    pub bl2_img_sig: [u8; 512],
+    pub blcp_img_sig: [u8; 512],
+}
+
+impl Default for Param1 {
+    fn default() -> Self {
+        Param1 {
+            nand_info: zeroes(),
+            nor_info: ones(),
+            fip_flags: zeroes(),
+            // ...
+            chip_conf_size: 0x2f8u32.to_le_bytes(),
+            // BLCP
+            blcp_img_cksum: 0xcafe0000u32.to_le_bytes(),
+            blcp_img_size: zeroes(),
+            blcp_img_runaddr: 0x0520_0200u32.to_le_bytes(), // const
+            blcp_param_loadaddr: zeroes(),
+            blcp_param_size: zeroes(),
+            // BL2
+            bl2_img_cksum: 0xcafe0000u32.to_le_bytes(), // TODO: fill in
+            bl2_img_size: 0u32.to_le_bytes(),           // TODO: fill in
+            //
+            bld_img_size: zeroes(),
+            param2_loadaddr: 0x0000_2a00u32.to_le_bytes(),
+            reserved1: zeroes(),
+            chip_conf: [
+                0x0c, 0x00, 0x00, 0x0e, //
+                0x01, 0x00, 0x00, 0xa0, //
+                0x0c, 0x00, 0x00, 0x0e, //
+                0x02, 0x00, 0x00, 0xa0, //
+                0xa0, 0xff, 0xff, 0xff, //
+                0xff, 0xff, 0xff, 0xff, //
+            ], // ??
+            // after 24 bytes, just zeroes
+            _pad: zeroes(),
+            // keys and signatures
+            bl_ek: zeroes(),
+            root_pk: zeroes(),
+            bl_pk: zeroes(),
+            bl_pk_sig: zeroes(),
+            chip_conf_sig: zeroes(),
+            bl2_img_sig: zeroes(),
+            blcp_img_sig: zeroes(),
+        }
+    }
+}
+
+impl Param1 {
+    pub fn checksum(&self) -> u16 {
+        let h1_size = 2048 - 16;
+        let h1_ptr = self as *const Self as *const u8;
+        let h1 = unsafe { std::slice::from_raw_parts(h1_ptr, h1_size) };
+        CRC.checksum(h1)
+    }
+
+    pub fn to_slice(&self) -> &[u8] {
+        let size = 4096 - 16;
+        let ptr = self as *const Self as *const u8;
+        unsafe { std::slice::from_raw_parts(ptr, size) }
+    }
+}

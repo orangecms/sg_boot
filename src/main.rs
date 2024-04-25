@@ -3,6 +3,8 @@ use log::info;
 use std::time::Duration;
 use std::{thread, time};
 
+use crate::protocol::Param1;
+
 mod protocol;
 
 // two minutes should be plenty
@@ -10,9 +12,6 @@ const POLL_TIMEOUT: Duration = Duration::from_secs(120);
 const POLL_PERIOD: Duration = Duration::from_millis(50);
 const TEN_SECS: Duration = Duration::from_secs(10);
 const HALF_SEC: Duration = Duration::from_millis(500);
-
-const HEADER: &[u8] = include_bytes!("../header.bin");
-const OREBOOT: &[u8] = include_bytes!("../oreboot_x.bin");
 
 const USB_VID_CVITEK: u16 = 0x3346;
 const USB_PID_USB_COM: u16 = 0x1000;
@@ -98,12 +97,33 @@ fn connect() -> std::boxed::Box<dyn serialport::SerialPort> {
 
 const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_XMODEM);
 fn main() {
-    let checksum = CRC.checksum(OREBOOT);
-    println!("Payload checksum: {checksum:04x}");
+    let payload = include_bytes!("../oreboot_x.bin");
 
-    let cut = HEADER[16..2048].to_vec();
-    let checksum = CRC.checksum(&cut);
+    let checksum = CRC.checksum(payload);
+    println!("Payload checksum: {checksum:04x}");
+    let checksum = checksum.to_le_bytes();
+
+    let param1 = Param1 {
+        bl2_img_size: (payload.len() as u32).to_le_bytes(),
+        bl2_img_cksum: [checksum[0], checksum[1], 0xfe, 0xca],
+        ..Default::default()
+    };
+
+    let checksum = param1.checksum();
     println!("Header checksum: {checksum:04x}");
+    let checksum = checksum.to_le_bytes();
+
+    let header = crate::protocol::CVITekHeader {
+        param1_checksum: [checksum[0], checksum[1], 0xfe, 0xca],
+        param1,
+        ..Default::default()
+    };
+
+    let mut s = header.to_slice().to_vec();
+    s.truncate(0x100);
+    println!("{:02x?}", s);
+    // println!("{header:#02x?}");
+    // println!("{:02x?}", header.to_slice());
 
     let cmd = Cli::parse().cmd;
     env_logger::init();
@@ -115,7 +135,9 @@ fn main() {
 
     println!("send HEADER...");
     let mut port = connect();
-    crate::protocol::send_file(&mut port, HEADER);
+
+    // let header = include_bytes!("../header.bin");
+    crate::protocol::send_file(&mut port, header.to_slice());
     crate::protocol::send_flag_and_break(&mut port);
     std::thread::sleep(HALF_SEC);
 
@@ -124,7 +146,7 @@ fn main() {
     crate::protocol::send_magic(&mut port);
 
     println!("send PAYLOAD...");
-    crate::protocol::send_file(&mut port, OREBOOT);
+    crate::protocol::send_file(&mut port, payload);
     crate::protocol::send_flag_and_break(&mut port);
 
     match cmd {
