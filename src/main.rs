@@ -114,10 +114,10 @@ fn main() {
                 (sz / IMG_ALIGN + 1) * IMG_ALIGN
             };
             payload.truncate(aligned);
-            println!("Payload size: {sz}; aligned: {aligned}");
+            println!("ℹ️ Payload size: {sz}; aligned: {aligned}");
 
             let checksum = CRC.checksum(&payload);
-            println!("Payload checksum: {checksum:04x}");
+            info!("Payload checksum: {checksum:04x}");
 
             let checksum = checksum.to_le_bytes();
             let param1 = Param1 {
@@ -127,7 +127,7 @@ fn main() {
             };
 
             let checksum = param1.checksum();
-            println!("Header checksum: {checksum:04x}");
+            info!("Header checksum: {checksum:04x}");
 
             let checksum = checksum.to_le_bytes();
             let header = crate::protocol::CVITekHeader {
@@ -136,25 +136,27 @@ fn main() {
                 ..Default::default()
             };
 
-            println!("Waiting for CVITek USB devices...");
+            println!("⏳ Waiting for CVITek USB devices...");
             let mut port = connect();
             crate::protocol::send_magic(&mut port);
             std::thread::sleep(Duration::from_millis(500));
 
-            println!("send HEADER...");
+            println!("➡️ send HEADER...");
             let mut port = connect();
 
             crate::protocol::send_file(&mut port, header.to_slice());
             crate::protocol::send_flag_and_break(&mut port);
             std::thread::sleep(HALF_SEC);
 
-            println!("Waiting for CVITek USB devices...");
+            println!("⏳ Waiting for CVITek USB devices...");
             let mut port = connect();
             crate::protocol::send_magic(&mut port);
 
-            println!("send PAYLOAD...");
+            println!("➡️ send PAYLOAD...");
             crate::protocol::send_file(&mut port, &payload);
             crate::protocol::send_flag_and_break(&mut port);
+
+            println!("🎉 Done. ");
         }
         Command::Info => {
             println!("nothing to see here :)");

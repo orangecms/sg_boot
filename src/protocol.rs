@@ -6,8 +6,11 @@ pub const SUCCESS: usize = 0;
 pub const FAIL: usize = 1;
 
 const CHUNK_SIZE: usize = 256;
-const FLAG_ADDR: u64 = 0x0E000004;
-const FLAG: [u8; 4] = *b"1NGM";
+
+const EFUSE_BASE: u64 = 0x0E00_0000;
+const BOOT_SRC_ADDR: u64 = EFUSE_BASE + 0x0004;
+const BOOT_SRC_USB: [u8; 4] = *b"1NGM";
+const BOOT_SRC_SD: [u8; 4] = *b"2NGM";
 
 // Memory addresses
 pub const DUMMY_ADDR: u64 = 0xFF;
@@ -59,10 +62,10 @@ const NO_MAGIC_HEADER: Header = Header {
     addr: DUMMY_ADDR,
 };
 
-const FLAG_HEADER: Header = Header {
+const BOOT_SRC_USB_HEADER: Header = Header {
     cmd: CVI_USB_TX_FLAG,
-    size: FLAG.len() as u16,
-    addr: FLAG_ADDR,
+    size: BOOT_SRC_USB.len() as u16,
+    addr: BOOT_SRC_ADDR,
 };
 
 const BREAK_HEADER: Header = Header {
@@ -112,7 +115,7 @@ pub fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
 }
 
 pub fn send_magic(port: &mut Port) {
-    println!("send NO MAGIC...");
+    info!("send NO MAGIC...");
     info!("{NO_MAGIC_HEADER:?}");
     let data = concat(&NO_MAGIC_HEADER.to_slice(), NO_MAGIC);
     info!("{data:x?}");
@@ -134,7 +137,7 @@ pub fn send_file(port: &mut Port, f: &[u8]) {
 }
 
 pub fn send_flag_and_break(port: &mut Port) {
-    let data = concat(&FLAG_HEADER.to_slice(), &FLAG);
+    let data = concat(&BOOT_SRC_USB_HEADER.to_slice(), &BOOT_SRC_USB);
     debug!("{data:x?}");
     send(port, &data);
     debug!("{BREAK_HEADER:?}");
