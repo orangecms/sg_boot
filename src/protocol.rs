@@ -9,8 +9,12 @@ const CHUNK_SIZE: usize = 256;
 
 const EFUSE_BASE: u64 = 0x0E00_0000;
 const BOOT_SRC_ADDR: u64 = EFUSE_BASE + 0x0004;
+// plat/cv180x/include/platform_def.h
+// plat/cv181x/include/platform_def.h
 const BOOT_SRC_USB: [u8; 4] = *b"1NGM";
 const BOOT_SRC_SD: [u8; 4] = *b"2NGM";
+// CV181x only?
+const BOOT_SRC_UART: [u8; 4] = *b"3NGM";
 
 // Memory addresses
 pub const DUMMY_ADDR: u64 = 0xFF;
@@ -103,6 +107,7 @@ fn check_response(data: &[u8], resp: &[u8]) {
 }
 
 fn send(port: &mut Port, data: &[u8]) {
+    debug!("data: {data:x?}");
     let sent = port.write(data).expect("Write failed!");
     let mut resp: Vec<u8> = vec![0; RESPONSE_SIZE];
     let read = port.read(resp.as_mut_slice()).expect("Found no data!");
@@ -116,9 +121,8 @@ pub fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
 
 pub fn send_magic(port: &mut Port) {
     info!("send NO MAGIC...");
-    info!("{NO_MAGIC_HEADER:?}");
+    debug!("{NO_MAGIC_HEADER:?}");
     let data = concat(&NO_MAGIC_HEADER.to_slice(), NO_MAGIC);
-    info!("{data:x?}");
     send(port, &data);
 }
 
@@ -129,18 +133,18 @@ pub fn send_file(port: &mut Port, f: &[u8]) {
             size: chunk.len() as u16,
             addr: (i * CHUNK_SIZE) as u64,
         };
-        info!("{h:?}");
+        debug!("{h:?}");
         let data = concat(&h.to_slice(), chunk);
-        debug!("{data:x?}");
         send(port, &data);
     }
 }
 
-pub fn send_flag_and_break(port: &mut Port) {
+pub fn send_flag(port: &mut Port) {
     let data = concat(&BOOT_SRC_USB_HEADER.to_slice(), &BOOT_SRC_USB);
-    debug!("{data:x?}");
     send(port, &data);
-    debug!("{BREAK_HEADER:?}");
+}
+
+pub fn send_break(port: &mut Port) {
     let data = BREAK_HEADER.to_slice();
     send(port, &data);
 }
@@ -164,11 +168,11 @@ pub struct CVITekHeader {
     pub param1: Param1,
 }
 
+const HEADER_MAGIC: [u8; 8] = *b"CVBL01\n\0";
 impl Default for CVITekHeader {
     fn default() -> Self {
-        let magic = *b"CVBL01\n\0";
         CVITekHeader {
-            magic,
+            magic: HEADER_MAGIC,
             _pad: 0,
             param1_checksum: zeroes(),
             param1: Param1::default(),
@@ -190,7 +194,7 @@ pub struct Param1 {
     pub nand_info: [u8; 128],
     pub nor_info: [u8; 36],
     pub fip_flags: [u8; 8],
-    pub chip_conf_size: [u8; 4],
+    pub chip_conf_size: [u8; 4], // 760, matching up with chip_conf+_pad below
     // BLCP
     pub blcp_img_cksum: [u8; 4],
     pub blcp_img_size: [u8; 4],
@@ -207,6 +211,7 @@ pub struct Param1 {
     pub chip_conf: [u8; 24], // originally 760
     pub _pad: [u8; 736],
     pub bl_ek: [u8; 32],
+    // ...
     pub root_pk: [u8; 512],
     pub bl_pk: [u8; 512],
     // last 2k

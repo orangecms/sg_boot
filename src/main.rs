@@ -36,9 +36,11 @@ impl std::fmt::Display for Board {
 #[derive(Debug, Subcommand)]
 enum Command {
     Info,
-    /// Write file to SRAM and execute (S905D3 only for now, needs header)
+    /// Write file to SRAM and execute
     #[clap(verbatim_doc_comment)]
     Run {
+        #[clap(long, short, action)]
+        main: bool,
         file_name: String,
     },
 }
@@ -103,7 +105,10 @@ fn main() {
     env_logger::init();
 
     match cmd {
-        Command::Run { file_name } => {
+        Command::Run {
+            file_name,
+            main: is_main,
+        } => {
             let addr = SRAM_BASE;
             let mut payload = std::fs::read(file_name).unwrap();
 
@@ -116,37 +121,44 @@ fn main() {
             payload.truncate(aligned);
             println!("ℹ️ Payload size: {sz}; aligned: {aligned}");
 
-            let checksum = CRC.checksum(&payload);
-            info!("Payload checksum: {checksum:04x}");
+            if is_main {
+                println!("Sending as main");
+            } else {
+                println!("Sending as FSBL");
+                let checksum = CRC.checksum(&payload);
+                info!("Payload checksum: {checksum:04x}");
 
-            let checksum = checksum.to_le_bytes();
-            let param1 = Param1 {
-                bl2_img_size: (payload.len() as u32).to_le_bytes(),
-                bl2_img_cksum: [checksum[0], checksum[1], 0xfe, 0xca],
-                ..Default::default()
-            };
+                let checksum = checksum.to_le_bytes();
+                let param1 = Param1 {
+                    bl2_img_size: (payload.len() as u32).to_le_bytes(),
+                    bl2_img_cksum: [checksum[0], checksum[1], 0xfe, 0xca],
+                    ..Default::default()
+                };
 
-            let checksum = param1.checksum();
-            info!("Header checksum: {checksum:04x}");
+                let checksum = param1.checksum();
+                info!("Header checksum: {checksum:04x}");
 
-            let checksum = checksum.to_le_bytes();
-            let header = crate::protocol::CVITekHeader {
-                param1_checksum: [checksum[0], checksum[1], 0xfe, 0xca],
-                param1,
-                ..Default::default()
-            };
+                let checksum = checksum.to_le_bytes();
+                let header = crate::protocol::CVITekHeader {
+                    param1_checksum: [checksum[0], checksum[1], 0xfe, 0xca],
+                    param1,
+                    ..Default::default()
+                };
+                info!("Header {header:02x?}");
 
-            println!("⏳ Waiting for CVITek USB devices...");
-            let mut port = connect();
-            crate::protocol::send_magic(&mut port);
-            std::thread::sleep(Duration::from_millis(500));
+                println!("⏳ Waiting for CVITek USB devices...");
+                let mut port = connect();
+                crate::protocol::send_magic(&mut port);
+                std::thread::sleep(Duration::from_millis(500));
 
-            println!("➡️ send HEADER...");
-            let mut port = connect();
+                println!("➡️ send HEADER...");
+                let mut port = connect();
 
-            crate::protocol::send_file(&mut port, header.to_slice());
-            crate::protocol::send_flag_and_break(&mut port);
-            std::thread::sleep(HALF_SEC);
+                crate::protocol::send_file(&mut port, header.to_slice());
+                crate::protocol::send_flag(&mut port);
+                crate::protocol::send_break(&mut port);
+                std::thread::sleep(HALF_SEC);
+            }
 
             println!("⏳ Waiting for CVITek USB devices...");
             let mut port = connect();
@@ -154,7 +166,8 @@ fn main() {
 
             println!("➡️ send PAYLOAD...");
             crate::protocol::send_file(&mut port, &payload);
-            crate::protocol::send_flag_and_break(&mut port);
+            crate::protocol::send_flag(&mut port);
+            crate::protocol::send_break(&mut port);
 
             println!("🎉 Done. ");
         }
