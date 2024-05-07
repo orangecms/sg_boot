@@ -88,13 +88,21 @@ fn poll_dev() -> String {
 
 fn connect() -> std::boxed::Box<dyn serialport::SerialPort> {
     let dev = poll_dev();
-    match serialport::new(dev.clone(), 115_200)
-        .timeout(TEN_SECS)
-        .open()
-    {
-        Ok(d) => d,
-        Err(_) => panic!("Failed to open serial port {dev}"),
+
+    // We managed to identify the device so far. Let's poll another round for opening it.
+    let open_timeout = time::Instant::now() + POLL_TIMEOUT;
+    while time::Instant::now() <= open_timeout {
+        if let Ok(d) = serialport::new(dev.clone(), 115_200)
+            .timeout(TEN_SECS)
+            .open()
+        {
+            return d;
+        }
+
+        std::thread::sleep(POLL_PERIOD);
     }
+
+    panic!("Failed to open serial port {dev}");
 }
 
 const CRC: crc::Crc<u16> = crc::Crc::<u16>::new(&crc::CRC_16_XMODEM);
