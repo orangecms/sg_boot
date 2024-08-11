@@ -187,6 +187,49 @@ impl CVITekHeader {
     }
 }
 
+// see plat/cv181x/include/platform_def.h
+struct SpiNandInfo {
+    //       uint32_t version;
+    //       uint32_t id;
+    //       uint32_t page_size;
+    //       uint32_t spare_size;
+    //       uint32_t block_size;
+    //       uint32_t pages_per_block;
+    //       uint32_t fip_block_cnt;
+    //       uint8_t pages_per_block_shift;
+    //       uint8_t badblock_pos;
+    //       uint8_t dummy_data1[2];
+    //       uint32_t flags;
+    //       uint8_t ecc_en_feature_offset;
+    //       uint8_t ecc_en_mask;
+    //       uint8_t ecc_status_offset;
+    //       uint8_t ecc_status_mask;
+    //       uint8_t ecc_status_shift;
+    //       uint8_t ecc_status_uncorr_val;
+    //       uint8_t dummy_data2[2];
+    //       uint32_t erase_count; // erase count for sys base block
+    //       uint8_t sck_l;
+    //       uint8_t sck_h;
+    //       uint16_t max_freq;
+    //       uint32_t sample_param;
+    //       uint8_t xtal_switch;
+    //       uint8_t dummy_data3[71];
+}
+
+struct SpiNorInfo {
+    //      uint32_t ctrl;
+    //      uint32_t dly_ctrl;
+    //      uint32_t tran_csr;
+    //      uint32_t opt;
+    //      uint32_t reserved_1;
+    //      uint32_t reserved_2;
+    //      uint32_t reserved_3;
+    //      uint32_t reserved_4;
+    //      uint32_t reserved_5;
+}
+
+/* ....... */
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct Param1 {
