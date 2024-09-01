@@ -17,7 +17,6 @@ const BOOT_SRC_SD: [u8; 4] = *b"2NGM";
 const BOOT_SRC_UART: [u8; 4] = *b"3NGM";
 
 // Memory addresses
-pub const DUMMY_ADDR: u64 = 0xFF;
 pub const DDR_FIP_ADDR: u64 = 0x8080_0000;
 pub const IMG_ADDR: u64 = 0x8394_0000;
 
@@ -63,7 +62,7 @@ impl Header {
 const NO_MAGIC_HEADER: Header = Header {
     cmd: CV_USB_KEEP_DL,
     size: NO_MAGIC.len() as u16,
-    addr: DUMMY_ADDR,
+    addr: 0,
 };
 
 const BOOT_SRC_USB_HEADER: Header = Header {
@@ -75,7 +74,7 @@ const BOOT_SRC_USB_HEADER: Header = Header {
 const BREAK_HEADER: Header = Header {
     cmd: CV_USB_BREAK,
     size: 0,
-    addr: DUMMY_ADDR,
+    addr: 0,
 };
 
 const RESPONSE_SIZE: usize = 16;
