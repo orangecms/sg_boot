@@ -1,6 +1,6 @@
 use log::{debug, info};
 
-const NO_MAGIC: &[u8] = include_bytes!("../nomagic.bin");
+const NO_MAGIC: [u8; 2] = [0x2c, 0x08];
 
 pub const SUCCESS: usize = 0;
 pub const FAIL: usize = 1;
@@ -122,7 +122,7 @@ pub fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
 pub fn send_magic(port: &mut Port) {
     info!("send NO MAGIC...");
     debug!("{NO_MAGIC_HEADER:?}");
-    let data = concat(&NO_MAGIC_HEADER.to_slice(), NO_MAGIC);
+    let data = concat(&NO_MAGIC_HEADER.to_slice(), NO_MAGIC.as_slice());
     send(port, &data);
 }
 
