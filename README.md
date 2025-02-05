@@ -14,3 +14,7 @@ This tool talks to CVITEK/Sophgo SoC mask ROMs, supporting:
   * Duo: CV1800B
   * Duo S: SG2000
   * Duo 256M: SG2002
+- Sipeed
+  * [LicheeRV
+    Nano (SG2002)](https://wiki.sipeed.com/hardware/en/lichee/RV_Nano/1_intro.html)
+  * [NanoKVM Cube (SG2002)](https://wiki.sipeed.com/hardware/en/kvm/NanoKVM/introduction.html)
